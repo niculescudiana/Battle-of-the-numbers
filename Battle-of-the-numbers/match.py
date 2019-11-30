@@ -1,6 +1,7 @@
 import pygame
 from random import *
 from copy import deepcopy
+import numpy as np
 import math
 
 pygame.init()
@@ -237,6 +238,29 @@ class Agent:
 			actions.append(Action("draw"))
 		return actions
 
+	def estimate_opponent_state(self, state):
+		# estimeaza valoarea medie a cartilor necunoscute
+		face_up_sum = sum(state.face_up)
+		current_player_sum = sum(state.hands_of_players[self.player_id])
+		opponent_count = len(state.hands_of_players[self.opponent_id])
+		face_down_count = len(state.face_down)
+		if face_down_count + opponent_count != 0:
+			unknown_sum = (66 - face_up_sum - current_player_sum)
+			unknown_estimated_avg = unknown_sum / (face_down_count + opponent_count)
+		else:
+			unknown_estimated_avg = 0
+
+		# conventia este ca toate cartile necunoscute sa fie reprezentate ca un 0, pentru a pute fi numarate
+		player_hand = [0 for _ in state.hands_of_players[self.player_id]]
+		state.hands_of_players[self.player_id] = player_hand
+
+		# calculeaza cartile pe care le ar putea avea oponentul in mana
+		# media lor trebuie sa ramana egala cu unknown_estimated_avg si numarul lor egal cu opponent_count
+		start = max([1, 2 * unknown_estimated_avg - 6])
+		stop = min([2 * unknown_estimated_avg - 1, 6])
+		opponent_hand = [i for i in np.linspace(start=start, stop=stop, num=opponent_count)]
+		state.hands_of_players[self.opponent_id] = opponent_hand
+
 	# calucueaza cea mai buna actiune pe care o poate lua self daca jocul se afla in starea known_state
 	def take_decision(self, known_state: State) -> Action:
 		if self.ai:
@@ -254,29 +278,12 @@ class Agent:
 				if self.depth_level > 1 and future_state.is_active:
 					# creaza o instata de agent care sa ia decizia ce ar face oponentul
 					opponent = Agent(player_id=self.opponent_id, depth_level=self.depth_level - 1)
-
-					# calculeaza cartile pe care ar crede oponentul ca le are self in mana
-					face_up_sum = sum(future_state.face_up)
-					current_player_sum = sum(future_state.hands_of_players[self.player_id])
-					opponent_count = len(future_state.hands_of_players[self.opponent_id])
-					face_down_count = len(future_state.face_down)
-					if face_down_count + opponent_count != 0:
-						unknown_sum = (66 - face_up_sum - current_player_sum)
-						unknown_estimated_avg = unknown_sum / (face_down_count + opponent_count)
-					else:
-						unknown_estimated_avg = 0
-
-					# conventia este ca toate cartile necunoscute sa fie reprezentate ca un 0, pentru a pute fi numarate
-					player_hand = [0 for _ in future_state.hands_of_players[self.player_id]]
-					opponent_hand = [unknown_estimated_avg for _ in future_state.hands_of_players[self.opponent_id]]
-
-					# o stare in care ar crede oponentul ca se afla pentru a calcula ce ar face acesta in acea situatie
+					# o stare in care ar crede oponentul ca se afla pentru a calcula ce ar face el in acea situatie
 					opponent_state = deepcopy(future_state)
-					opponent_state.hands_of_players[self.player_id] = player_hand
-					opponent_state.hands_of_players[self.opponent_id] = opponent_hand
+					self.estimate_opponent_state(opponent_state)
 					# oponentul alege care ar fi cea mai buna mutare pentru el plecand de la starea opponent_state
 					opponent_action = opponent.take_decision(opponent_state)
-					# aplica actiunea aleasa de oponentul pentru a estima in ce stare se va afla jocul
+					# aplica actiunea aleasa pentru a estima in ce stare se va afla jocul dupa actiunea oponentului
 					future_state.apply(self.opponent_id, opponent_action)
 
 				# cauta actiunea care rezulta in cel mai mare avantaj
