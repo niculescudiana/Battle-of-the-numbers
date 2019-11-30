@@ -176,13 +176,20 @@ class State:
 				if self.face_down:
 					self.face_down.append(card)
 		elif action.option == "end game":
-			# you lose if either you have strictly more than the face up pile
-			# or the opponent has a score between yours and the face up pile
-			if sum(self.face_up) < sum(hand_of_current_player) \
-					or sum(hand_of_current_player) <= sum(hand_of_other_player) <= sum(self.face_up):
-				self.winner = (player_id + 1) % 2
+			if self.mode == 0:
+				# you lose if either you have strictly more than the face up pile
+				# or the opponent has a score between yours and the face up pile
+				if sum(self.face_up) < sum(hand_of_current_player) \
+						or sum(hand_of_current_player) <= sum(hand_of_other_player) <= sum(self.face_up):
+					self.winner = (player_id + 1) % 2
+				else:
+					self.winner = player_id
 			else:
-				self.winner = player_id
+				if sum(self.face_up) > sum(hand_of_current_player) \
+						or sum(hand_of_current_player) >= sum(hand_of_other_player) >= sum(self.face_up):
+					self.winner = (player_id + 1) % 2
+				else:
+					self.winner = player_id
 
 
 class Agent:
@@ -368,7 +375,7 @@ class Game:
 		self.current_player_id %= 2
 
 
-game = Game(Agent(player_id=0, depth_level=2, ai=False), Agent(player_id=1, depth_level=2, logging=False))
+game = Game(Agent(player_id=0, depth_level=2, ai=False), Agent(player_id=1, depth_level=2, logging=False), mode=1)
 
 while game.state.is_active:
 	ev = pygame.event.get()
