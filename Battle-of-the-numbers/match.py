@@ -1,9 +1,9 @@
-import pygame, sys
-import time
+import pygame
+import sys
 from random import *
-import copy
+from copy import deepcopy
+import numpy as np
 import math
-from pygame.locals import *
 
 pygame.init()
 
@@ -43,13 +43,10 @@ def text_objects(text, font, colour):
 def draw_start_screen(mode_choice: int):
     background_image = pygame.image.load("./min/background.jpeg").convert()
     background_image = pygame.transform.scale(background_image, (1500, 620))
-
     gameDisplay.blit(background_image, [0, 0])
-
     draw_text(mmm_cream, "fonts/ARCADE.TTF", 100, "The Battle of the Numbers", (display_width / 2), 120)
     draw_text(black, "fonts/ARCADE.TTF", 35, "Mode 1", (display_width / 2) - 20, 285)
     draw_text(black, "fonts/ARCADE.TTF", 35, "Mode 2", (display_width / 2) - 20, 320)
-
     start = draw_interactive_button(300, 50, 485, mmm_orange, mmm_orange_lite, "START", False)
     exit_game = draw_interactive_button(300, 50, 570, red, red, "EXIT GAME", False)
     if mode_choice == 1:
@@ -145,6 +142,11 @@ class State:
         self.winner = None
         self.mode = mode
 
+    # intoarce True daca jocul este inca activ adica daca nu exista un castigator
+    @property
+    def is_active(self):
+        return self.winner is None
+
     def __str__(self):
         return f"{self.face_up}\n{self.hands_of_players}\n" + (
             f"And the Winner is... Player {self.winner + 1}!" if self.winner is not None else " still going")
@@ -152,16 +154,19 @@ class State:
     def apply(self, player_id: int, action: Action):
         hand_of_current_player = self.hands_of_players[player_id]
         hand_of_other_player = self.hands_of_players[(player_id + 1) % 2]
-        if action.card_choice not in range(len(hand_of_current_player)):
+        if action.option in ["play", "discard"] and action.card_choice not in range(len(hand_of_current_player)):
             raise ValueError('Invalid action: player does not have enough cards')
+        # ia ultima carte cu fata in sus si o pune in mana jucatorului curent
         if action.option == "draw":
             if self.face_up:
                 card = self.face_up.pop(-1)
                 hand_of_current_player.append(card)
+        # ia cartea de la action.card_choice din mana jucatorului si o pune cu fata in sus
         elif action.option == "play":
             if hand_of_current_player:
                 card = hand_of_current_player.pop(action.card_choice)
                 self.face_up.append(card)
+        # ia cartea de la action.card_choice din mana jucatorului si o pune cu fata in jos
         elif action.option == "discard":
             if hand_of_current_player:
                 card = hand_of_current_player.pop(action.card_choice)
@@ -201,25 +206,33 @@ class Agent:
     def opponent_id(self):
         return (self.player_id + 1) % 2
 
+    # estimeaza avantajul jucatorului self in situatia in care jocul se afla in starea known_state
     def score(self, known_state: State) -> float:
+        # aici se estimeaza suma cartilor (necunoscute) din mana adversarului
         face_up_sum = sum(known_state.face_up)
         current_player_sum = sum(known_state.hands_of_players[self.player_id])
         opponent_count = len(known_state.hands_of_players[self.opponent_id])
         face_down_count = len(known_state.face_down)
         if face_down_count + opponent_count != 0:
-            unknown_estimated_avg = (66 - face_up_sum - current_player_sum) / (face_down_count + opponent_count)
+            unknown_sum = (66 - face_up_sum - current_player_sum)
+            unknown_estimated_avg = unknown_sum / (face_down_count + opponent_count)
         else:
             unknown_estimated_avg = 0
         opponent_estimated_sum = unknown_estimated_avg * face_down_count
-        penalty = min((face_up_sum - current_player_sum), 0)
-        score = current_player_sum - opponent_estimated_sum + 66 * penalty
-        if known_state.winner is None:
-            return score
+        # daca jucatorul are mai mult decat jos, nu are cum sa castige indiferent de catrile adversarului
+        # va primi o penalizare care va fi inmultita cu un numar foarte mare pentru a prioritiza sa aiba mai putin
+        penalty = 66 * max((current_player_sum - face_up_sum), 0)
+        score = current_player_sum - opponent_estimated_sum - penalty
+        if known_state.is_active:
+            # daca jocul este activ intoarce avantajul jucatorului calculat pana acum
+            return score if known_state.mode == 0 else -score
         elif known_state.winner == self.player_id:
+            # daca jucatorul a castigat jocul avantajul ia cea mai mare valoare pe care o poate lua
             return math.inf
         else:
             return -math.inf
 
+    # intoarce o lista cu toate actiunile pe care le poate lua self din starea state
     def valid_actions(self, state) -> list:
         card_count = len(state.hands_of_players[self.player_id])
         actions = [Action("end game")]
@@ -229,40 +242,58 @@ class Agent:
             actions.append(Action("draw"))
         return actions
 
+    def estimate_opponent_state(self, state):
+        # estimeaza valoarea medie a cartilor necunoscute
+        face_up_sum = sum(state.face_up)
+        current_player_sum = sum(state.hands_of_players[self.player_id])
+        opponent_count = len(state.hands_of_players[self.opponent_id])
+        face_down_count = len(state.face_down)
+        if face_down_count + opponent_count != 0:
+            unknown_sum = (66 - face_up_sum - current_player_sum)
+            unknown_estimated_avg = unknown_sum / (face_down_count + opponent_count)
+        else:
+            unknown_estimated_avg = 0
+
+        # conventia este ca toate cartile necunoscute sa fie reprezentate ca un 0, pentru a pute fi numarate
+        player_hand = [0 for _ in state.hands_of_players[self.player_id]]
+        state.hands_of_players[self.player_id] = player_hand
+
+        # calculeaza cartile pe care le ar putea avea oponentul in mana
+        # media lor trebuie sa ramana egala cu unknown_estimated_avg si numarul lor egal cu opponent_count
+        start = max([1, 2 * unknown_estimated_avg - 6])
+        stop = min([2 * unknown_estimated_avg - 1, 6])
+        opponent_hand = [i for i in np.linspace(start=start, stop=stop, num=opponent_count)]
+        state.hands_of_players[self.opponent_id] = opponent_hand
+
+    # calucueaza cea mai buna actiune pe care o poate lua self daca jocul se afla in starea known_state
     def take_decision(self, known_state: State) -> Action:
         if self.ai:
             best_score = -math.inf
             best_action = Action("end game")
+            # considera fiecare actiune pe care o poate lua
             for action in self.valid_actions(known_state):
-                copy_state = copy.deepcopy(known_state)
-                copy_state.apply(self.player_id, action)
+                # creaza o copie a starii curente
+                # copia urmeaza sa fie modificata, dar starea curenta ramane aceasi
+                future_state = deepcopy(known_state)
+                # afla in ce stare s-ar afla daca s-ar intampla actiunea aleasa
+                future_state.apply(self.player_id, action)
 
-                if self.depth_level > 1 and copy_state.winner is None:
+                # caluculeaza recursiv cea mai buna miscare pe care o poate lua oponentul
+                if self.depth_level > 1 and future_state.is_active:
+                    # creaza o instata de agent care sa ia decizia ce ar face oponentul
                     opponent = Agent(player_id=self.opponent_id, depth_level=self.depth_level - 1)
-
-                    face_up_sum = sum(copy_state.face_up)
-                    current_player_sum = sum(copy_state.hands_of_players[self.player_id])
-                    opponent_count = len(copy_state.hands_of_players[self.opponent_id])
-                    face_down_count = len(copy_state.face_down)
-                    if face_down_count + opponent_count != 0:
-                        unknown_estimated_avg = (66 - face_up_sum - current_player_sum) / (
-                                face_down_count + opponent_count)
-                    else:
-                        unknown_estimated_avg = 0
-
-                    player_hand = [0 for _ in copy_state.hands_of_players[self.player_id]]
-                    opponent_hand = [unknown_estimated_avg for _ in copy_state.hands_of_players[self.opponent_id]]
-
-                    opponent_state = copy.deepcopy(copy_state)
-                    opponent_state.hands_of_players[self.player_id] = player_hand
-                    opponent_state.hands_of_players[self.opponent_id] = opponent_hand
-
+                    # o stare in care ar crede oponentul ca se afla pentru a calcula ce ar face el in acea situatie
+                    opponent_state = deepcopy(future_state)
+                    self.estimate_opponent_state(opponent_state)
+                    # oponentul alege care ar fi cea mai buna mutare pentru el plecand de la starea opponent_state
                     opponent_action = opponent.take_decision(opponent_state)
-                    copy_state.apply(self.opponent_id, opponent_action)
+                    # aplica actiunea aleasa pentru a estima in ce stare se va afla jocul dupa actiunea oponentului
+                    future_state.apply(self.opponent_id, opponent_action)
 
-                if self.score(copy_state) >= best_score:
+                # cauta actiunea care rezulta in cel mai mare avantaj
+                if self.score(future_state) >= best_score:
                     best_action = action
-                    best_score = self.score(copy_state)
+                    best_score = self.score(future_state)
             if self.logging:
                 print(str(known_state))
             return best_action
@@ -296,7 +327,7 @@ class Agent:
                             elif 750 < x < display_width and 70 < y < 70 + img_height:
                                 action = Action("discard", i)
 
-                if action is not None and action in self.valid_actions(known_state):
+                if action is not None and action in actions:
                     return action
 
 
@@ -305,28 +336,24 @@ class Game:
         deck = 2 * list(range(1, 6)) + 6 * list([6])
         shuffle(deck)
         if mode == 0:
-            self.state = State([], deck[0:4], deck[4:10], deck[10:16], 0)
+            self.state = State([], deck[0:4], deck[4:10], deck[10:16], mode)
         else:
-            self.state = State(deck[0:4], deck[4:10], deck[10:13], deck[13:16], 1)
+            self.state = State(deck[0:4], deck[4:10], deck[10:13], deck[13:16], mode)
         self.players = (player1, player2)
         self.current_player_id = 0
 
     def take_turns(self):
+        # creaza o stare in care sunt numai cartiile cunoscute
+        # toate cartile necunoscute vor fi reprezentate ca un 0, pentru a pute fi numarate
+        known_state = State(
+            self.state.face_up,
+            [0 for _ in self.state.face_down],
+            [(card if self.current_player_id == 0 else 0) for card in self.state.hands_of_players[0]],
+            [(0 if self.current_player_id == 0 else card) for card in self.state.hands_of_players[1]])
         if self.current_player_id == 0:
-            known_state = State(
-                self.state.face_up,
-                [0 for _ in self.state.face_down],
-                self.state.hands_of_players[0],
-                [0 for _ in self.state.hands_of_players[1]])
             load_card(self.state.face_up, self.state.face_down, self.state.hands_of_players[0],
                       self.state.hands_of_players[1])
             pygame.display.update()
-        else:
-            known_state = State(
-                self.state.face_up,
-                [0 for _ in self.state.face_down],
-                [0 for _ in self.state.hands_of_players[0]],
-                self.state.hands_of_players[1])
 
         action = self.players[self.current_player_id].take_decision(known_state)
 
@@ -364,7 +391,7 @@ while wait:
     (x, y) = pygame.mouse.get_pos()
 
     if 485 < y < 535 and 600 < x < 900:
-        while game.state.winner is None:
+        while game.state.is_active:
             wait = 0
             gameDisplay.fill(black)
             pygame.display.update()
@@ -387,7 +414,6 @@ while wait:
                     pygame.display.quit()
                     pygame.quit()
                     sys.exit()
-                    loop = 0
     elif 570 < y < 620 and 600 < x < 900:
         wait = 0
         pygame.display.quit()
