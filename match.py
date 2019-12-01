@@ -29,8 +29,8 @@ gameDisplay = pygame.display.set_mode((display_width, display_height))
 pygame.display.set_caption('The Battle of the numbers')
 clock = pygame.time.Clock()
 
-img_width = 80
-img_height = 120
+img_width = 90
+img_height = 130
 
 start_screen = True
 
@@ -47,8 +47,8 @@ def draw_start_screen(mode_choice: int):
     draw_text(mmm_cream, "fonts/ARCADE.TTF", 100, "The Battle of the Numbers", (display_width / 2), 120)
     draw_text(black, "fonts/ARCADE.TTF", 35, "Mode 1", (display_width / 2) - 20, 285)
     draw_text(black, "fonts/ARCADE.TTF", 35, "Mode 2", (display_width / 2) - 20, 320)
-    start = draw_interactive_button(300, 50, 485, mmm_orange, mmm_orange_lite, "START", False)
-    exit_game = draw_interactive_button(300, 50, 570, red, red, "EXIT GAME", False)
+    draw_interactive_button(300, 50, 485, mmm_orange_lite, "START")
+    draw_interactive_button(300, 50, 570, red, "EXIT GAME")
     if mode_choice == 1:
         pygame.draw.circle(gameDisplay, black, (int(display_width / 2) - 100, 277), 9, 3)
     else:
@@ -62,28 +62,25 @@ def draw_text(colour, font, size, content, center_x, center_y):
     gameDisplay.blit(text_surf, text_rect)
 
 
-def draw_interactive_button(w, h, y, colour, secondary_colour, text, restart):
+def draw_interactive_button(w, h, y, secondary_colour, text):
     stay_on_start_screen = True
     x = display_width / 2 - w / 2
-    click = pygame.mouse.get_pressed()
+    pygame.mouse.get_pressed()
     pygame.draw.rect(gameDisplay, secondary_colour, (int(x), y, w, h))
     draw_text(mmm_cream, "fonts/ARCADE.TTF", 50, text, display_width / 2, y + 32)
     return stay_on_start_screen
 
 
-def load_card(face_up: list, face_down: list, hand_of_player1: list, hand_of_player2: list, end_game: int = 0,
-              winner: int = 0):
+def load_card(face_up: list, face_down: list, hand_of_player1: list, hand_of_player2: list, end_game: bool = False,
+              winner_id: int = 0):
     for i in range(len(face_up)):
         card = "./min/%s.jpeg" % face_up[i]
         img = pygame.image.load(card)
-        # image_width = img.convert().get_width()
-        # gameDisplay.blit(img, (0 + i * 10 * img_width//2, 70))
         gameDisplay.blit(img, (0 + i * 100, 70))
 
     for i in range(len(face_down)):
         card = "./min/back.jpeg"
         img = pygame.image.load(card)
-        # image_width = img.convert().get_width()
         gameDisplay.blit(img, (750 + i * 50, 70))
 
     draw_text(mmm_cream, "fonts/ARCADE.TTF", 70, "Player 1:", 250, 420)
@@ -95,7 +92,7 @@ def load_card(face_up: list, face_down: list, hand_of_player1: list, hand_of_pla
 
     draw_text(mmm_cream, "fonts/ARCADE.TTF", 70, "Player 2:", 900, 420)
 
-    if end_game == 0:
+    if end_game is False:
         for i in range(len(hand_of_player2)):
             card = "./min/back.jpeg"
             img = pygame.image.load(card)
@@ -108,10 +105,7 @@ def load_card(face_up: list, face_down: list, hand_of_player1: list, hand_of_pla
             card = "./min/%s.jpeg" % hand_of_player2[i]
             img = pygame.image.load(card)
             gameDisplay.blit(img, (700 + i * 100, 460))
-        if winner == 0:
-            draw_text(red, "fonts/ARCADE.TTF", 80, "Player 1 WON", 670, 330)
-        else:
-            draw_text(red, "fonts/ARCADE.TTF", 80, "Player 2 WON", 670, 330)
+        draw_text(red, "fonts/ARCADE.TTF", 80, f"Player {winner_id + 1} WON", 670, 330)
         pygame.draw.rect(gameDisplay, mmm_purple_lite, (580, 625, 200, 50))
         draw_text(white, "fonts/ARCADE.TTF", 30, "PLAY AGAIN", 670, 650)
 
@@ -187,6 +181,18 @@ class State:
                     self.winner = (player_id + 1) % 2
                 else:
                     self.winner = player_id
+
+
+def draw_frame_around_card(color, card_x, card_y, thickness=10):
+    # margine din stanga
+    pygame.draw.rect(gameDisplay, color, (card_x - thickness, card_y, thickness, img_height))
+    # margine de dreapta
+    pygame.draw.rect(gameDisplay, color, (card_x + img_width, card_y, thickness, img_height))
+    # margine de sus
+    pygame.draw.rect(gameDisplay, color, (card_x - thickness, card_y - thickness, img_width + 2*thickness, thickness))
+    # margine de jos
+    pygame.draw.rect(gameDisplay, color, (card_x - thickness, card_y + img_height, img_width + 2*thickness, thickness))
+    pygame.display.update()
 
 
 class Agent:
@@ -304,7 +310,6 @@ class Agent:
                 while pygame.event.wait() and not pygame.mouse.get_pressed()[0]:
                     pass
                 (x, y) = pygame.mouse.get_pos()
-                print(f"outside click {(x, y)}")
 
                 if 0 < x < 750 and 70 < y < 70 + img_height:
                     action = Action("draw")
@@ -312,19 +317,23 @@ class Agent:
                     action = Action("end game")
                 else:
                     for i in range(len(known_state.hands_of_players[0])):
-                        if 20 + i * 100 < x < 20 + i * 100 + img_width and 440 < y < 440 + img_height:
+                        if 20 + i * 100 < x < 20 + i * 100 + img_width and 460 < y < 460 + img_height:
 
-                            print("inside")
+                            # highlight player card
+                            draw_frame_around_card(mmm_orange_lite, card_x=20+i*100, card_y=460)
+
                             while pygame.event.wait() and not pygame.mouse.get_pressed()[0]:
                                 pass
 
                             (x, y) = pygame.mouse.get_pos()
-                            print(f"click {(x, y)}")
 
                             if 0 < x < 750 and 70 < y < 70 + img_height:
                                 action = Action("play", i)
                             elif 750 < x < display_width and 70 < y < 70 + img_height:
                                 action = Action("discard", i)
+
+                            # mask highlight
+                            draw_frame_around_card(black, card_x=20+i*100, card_y=460)
 
                 if action is not None and action in self.valid_actions(known_state):
                     return action
@@ -357,20 +366,17 @@ class Game:
         action = self.players[self.current_player_id].take_decision(known_state)
 
         print(f"Player {self.current_player_id + 1} will {action.option} ", end=" ")
-        if action.option in ["play", "discard"]:
+        if action.option is "play":
             print(f"{self.state.hands_of_players[self.current_player_id][action.card_choice]}", end="")
         print("\n")
-
         self.state.apply(self.current_player_id, action)
-        print(self.state)
+
         gameDisplay.fill(black)
         pygame.display.update()
-        if action.option == "end game":
-            load_card(self.state.face_up, self.state.face_down, self.state.hands_of_players[0],
-                      self.state.hands_of_players[1], end_game=1, winner=self.state.winner)
-        else:
-            load_card(self.state.face_up, self.state.face_down, self.state.hands_of_players[0],
-                      self.state.hands_of_players[1])
+        load_card(self.state.face_up, self.state.face_down,
+                  self.state.hands_of_players[0],
+                  self.state.hands_of_players[1],
+                  end_game=action.option == "end game", winner_id=self.state.winner)
         pygame.display.update()
 
         self.current_player_id += 1
@@ -378,13 +384,12 @@ class Game:
 
 
 wait = 1
-mode_choice = 1
+game_mode = 1
 
 while wait:
-    game = Game(Agent(player_id=0, depth_level=2, ai=False), Agent(player_id=1, depth_level=2, logging=False),
-                mode=mode_choice)
+    game = Game(Agent(player_id=0, ai=False), Agent(player_id=1, depth_level=3), mode=game_mode)
     gameDisplay.fill(black)
-    draw_start_screen(mode_choice=mode_choice)
+    draw_start_screen(mode_choice=game_mode)
     pygame.display.update()
 
     while pygame.event.wait() and not pygame.mouse.get_pressed()[0]:
@@ -409,7 +414,7 @@ while wait:
             # buton de play again
             if 580 < x < 780 and 625 < y < 675:
                 gameDisplay.fill(black)
-                draw_start_screen(mode_choice=mode_choice)
+                draw_start_screen(mode_choice=game_mode)
                 pygame.display.update()
                 wait = 1
                 loop = 0
@@ -427,6 +432,6 @@ while wait:
         sys.exit()
 
     elif 634 < x < 789 and 265 < y < 291:
-        mode_choice = 1
+        game_mode = 1
     elif 634 < x < 789 and 302 < y < 329:
-        mode_choice = 2
+        game_mode = 2
