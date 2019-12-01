@@ -12,9 +12,11 @@ To set up a round, deal six cards face down to each player, then remove the rema
 3: DISCARD a card from your hand, placing it to the side out of play for this round. (Click on the card you want to discard, then click on the upper right part of the screen).
 
 ---For the first mode of play:
+
 4: KNOCK to end the round and see who wins; you may do this only if the sum of cards in your hand is equal to or less than the sum on the table. The players then compare sums, and whoever has the highest sum (without going over the sum of cards on the table) wins; if the players are tied, the player who knocked loses. (Click on the END GAME button).
 
 ---For the second mode of play:
+
 4: KNOCK to end the round and see who wins; you may do this only if the sum of cards in your hand is equal to or higher than the sum on the table. The players then compare sums, and whoever has the lowest sum (without going under the sum of cards on the table) wins; if the players are tied, the player who knocked loses. (Click on the END GAME button).
 
 ### To run the game
