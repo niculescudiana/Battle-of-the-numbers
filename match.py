@@ -135,7 +135,7 @@ class Action:
 
 class State:
     def __init__(self, face_up: list, face_down: list, hand_of_player_one: list, hand_of_player_two: list,
-                 mode: int = 0):
+                 mode: int = 1):
         self.face_up = face_up
         self.face_down = face_down
         self.hands_of_players = [hand_of_player_one, hand_of_player_two]
@@ -173,7 +173,7 @@ class State:
                 if self.face_down:
                     self.face_down.append(card)
         elif action.option == "end game":
-            if self.mode == 0:
+            if self.mode == 1:
                 # you lose if either you have strictly more than the face up pile
                 # or the opponent has a score between yours and the face up pile
                 if sum(self.face_up) < sum(hand_of_current_player) \
@@ -225,7 +225,7 @@ class Agent:
         score = current_player_sum - opponent_estimated_sum - penalty
         if known_state.is_active:
             # daca jocul este activ intoarce avantajul jucatorului calculat pana acum
-            return score if known_state.mode == 0 else -score
+            return score if known_state.mode == 1 else -score
         elif known_state.winner == self.player_id:
             # daca jucatorul a castigat jocul avantajul ia cea mai mare valoare pe care o poate lua
             return math.inf
@@ -298,7 +298,6 @@ class Agent:
                 print(str(known_state))
             return best_action
         else:
-            actions = self.valid_actions(known_state)
             action = None
             while True:
 
@@ -327,15 +326,15 @@ class Agent:
                             elif 750 < x < display_width and 70 < y < 70 + img_height:
                                 action = Action("discard", i)
 
-                if action is not None and action in actions:
+                if action is not None and action in self.valid_actions(known_state):
                     return action
 
 
 class Game:
-    def __init__(self, player1: Agent, player2: Agent, mode: int = 0):
+    def __init__(self, player1: Agent, player2: Agent, mode: int = 1):
         deck = 2 * list(range(1, 6)) + 6 * list([6])
         shuffle(deck)
-        if mode == 0:
+        if mode == 1:
             self.state = State([], deck[0:4], deck[4:10], deck[10:16], mode)
         else:
             self.state = State(deck[0:4], deck[4:10], deck[10:13], deck[13:16], mode)
@@ -378,42 +377,49 @@ class Game:
         self.current_player_id %= 2
 
 
-game = Game(Agent(player_id=0, depth_level=2, ai=False), Agent(player_id=1, depth_level=2, logging=False), mode=0)
-draw_start_screen(mode_choice=1)
-pygame.display.update()
-
 wait = 1
+mode_choice = 1
 
 while wait:
+    game = Game(Agent(player_id=0, depth_level=2, ai=False), Agent(player_id=1, depth_level=2, logging=False),
+                mode=mode_choice)
+    gameDisplay.fill(black)
+    draw_start_screen(mode_choice=mode_choice)
+    pygame.display.update()
+
     while pygame.event.wait() and not pygame.mouse.get_pressed()[0]:
         pass
 
     (x, y) = pygame.mouse.get_pos()
 
+    # buton de start game
     if 485 < y < 535 and 600 < x < 900:
         while game.state.is_active:
             wait = 0
             gameDisplay.fill(black)
             pygame.display.update()
             game.take_turns()
-            pygame.display.update()
-        if game.state.winner is not None:
-            loop = 1
-            while loop:
-                while pygame.event.wait() and not pygame.mouse.get_pressed()[0]:
-                    pass
-                (x, y) = pygame.mouse.get_pos()
-                if 580 < x < 780 and 625 < y < 675:
-                    gameDisplay.fill(black)
-                    draw_start_screen(mode_choice=1)
-                    pygame.display.update()
-                    wait = 1
-                    loop = 0
-                elif 1300 < x < 1450 and 100 < y < 150:
-                    wait = 0
-                    pygame.display.quit()
-                    pygame.quit()
-                    sys.exit()
+        # jocul s-a terminat
+        pygame.display.update()
+        loop = 1
+        while loop:
+            while pygame.event.wait() and not pygame.mouse.get_pressed()[0]:
+                pass
+            (x, y) = pygame.mouse.get_pos()
+            # buton de play again
+            if 580 < x < 780 and 625 < y < 675:
+                gameDisplay.fill(black)
+                draw_start_screen(mode_choice=mode_choice)
+                pygame.display.update()
+                wait = 1
+                loop = 0
+            # buton de exit
+            elif 1300 < x < 1450 and 100 < y < 150:
+                wait = 0
+                pygame.display.quit()
+                pygame.quit()
+                sys.exit()
+    # buton de exit
     elif 570 < y < 620 and 600 < x < 900:
         wait = 0
         pygame.display.quit()
@@ -421,14 +427,6 @@ while wait:
         sys.exit()
 
     elif 634 < x < 789 and 265 < y < 291:
-        game = Game(Agent(player_id=0, depth_level=2, ai=False), Agent(player_id=1, depth_level=2, logging=False),
-                    mode=0)
-        gameDisplay.fill(black)
-        draw_start_screen(mode_choice=1)
-        pygame.display.update()
+        mode_choice = 1
     elif 634 < x < 789 and 302 < y < 329:
-        game = Game(Agent(player_id=0, depth_level=2, ai=False), Agent(player_id=1, depth_level=2, logging=False),
-                    mode=1)
-        gameDisplay.fill(black)
-        draw_start_screen(mode_choice=2)
-        pygame.display.update()
+        mode_choice = 2
